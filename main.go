@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	//	"net/http/pprof"
+
 	"os"
 	"os/signal"
 	"strconv"
@@ -24,9 +24,9 @@ import (
 const (
 	defaultDeadline = 10 * time.Second
 	defaultMetric   = 60 * time.Second
-	DataStr         = "data"
-	ModeStr         = "mode"
-	TopicStr        = "topic"
+	DataStr         = "data"  //kafka message
+	ModeStr         = "mode"  // mode
+	TopicStr        = "topic" // kafka topic
 )
 
 var confname string
@@ -66,6 +66,10 @@ type LogMessage struct {
 	ExtInfo   string `json:"ext_info"`
 }
 
+type ResCount struct {
+	Count int `json:"count"`
+}
+
 func logMsgData(w http.ResponseWriter, r *http.Request) {
 	var ms []LogMessage
 	if err := ParseJson(r, &ms); err != nil {
@@ -84,7 +88,10 @@ func logMsgData(w http.ResponseWriter, r *http.Request) {
 		GetServer().TransportMsg(topic, string(dataval), 0, true)
 		count = count + 1
 	}
-	WriteResponse(w, http.StatusOK, count)
+	data := &ResCount{
+		Count: count,
+	}
+	WriteResponse(w, http.StatusOK, data)
 }
 
 func WriteResponse(w http.ResponseWriter, statusCode int, data interface{}) {
@@ -124,7 +131,10 @@ func kafkaHandler(w http.ResponseWriter, r *http.Request) {
 		GetServer().TransportMsg(m.Topic, m.Data, 0, true)
 		count = count + 1
 	}
-	WriteResponse(w, http.StatusOK, count)
+	data := &ResCount{
+		Count: count,
+	}
+	WriteResponse(w, http.StatusOK, data)
 }
 
 func statHandler(w http.ResponseWriter, r *http.Request) {
@@ -135,13 +145,21 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, st.GetStat().GetStatus())
 }
 
+type IdCode struct {
+	Id int64 `json:"id"`
+}
+
 func uuidHandler(w http.ResponseWriter, r *http.Request) {
 	uuid, err := GetServer().GetUid()
 	if err != nil {
 		log.Errorf("uuid error, %v", err)
 		return
 	}
-	WriteResponse(w, http.StatusOK, uuid)
+
+	data := &IdCode{
+		Id: uuid,
+	}
+	WriteResponse(w, http.StatusOK, data)
 }
 
 func main() {
@@ -181,7 +199,7 @@ func main() {
 	router := http.NewServeMux()
 	router.HandleFunc("/addkafka", kafkaHandler)
 	router.HandleFunc("/logkafka", logMsgData)
-	router.Handle("/metric", metric.WebMetricHandler(defaultMetric))
+	router.Handle("/metric", metric.WebMetricHandler(defaultMetric, float64(0.5)))
 	router.HandleFunc("/stats", statHandler)
 	router.HandleFunc("/status", statusHandler)
 	router.HandleFunc("/idgen", uuidHandler)

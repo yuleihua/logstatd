@@ -14,6 +14,7 @@ const (
 
 type Exporter struct {
 	timeout       time.Duration
+	ver           float64
 	up            *prometheus.Desc
 	uptime        *prometheus.Desc
 	version       *prometheus.Desc
@@ -27,9 +28,10 @@ type Exporter struct {
 	recovery      *prometheus.Desc
 }
 
-func NewExporter(timeout time.Duration) *Exporter {
+func NewExporter(timeout time.Duration, ver float64) *Exporter {
 	return &Exporter{
 		timeout: timeout,
+		ver:     ver,
 		up: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "up"),
 			"Could the server be reached.",
@@ -44,7 +46,7 @@ func NewExporter(timeout time.Duration) *Exporter {
 		),
 		version: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "version"),
-			"The version of this lion server.",
+			"The version of this server.",
 			[]string{"version"},
 			nil,
 		),
@@ -116,7 +118,7 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(e.up, prometheus.CounterValue, float64(st.GetStat().Status))
 	ch <- prometheus.MustNewConstMetric(e.uptime, prometheus.GaugeValue, time.Now().Sub(st.GetStat().UpTime).Seconds())
-	ch <- prometheus.MustNewConstMetric(e.version, prometheus.GaugeValue, 1.0)
+	ch <- prometheus.MustNewConstMetric(e.version, prometheus.GaugeValue, e.ver, "version")
 
 	ch <- prometheus.MustNewConstMetric(e.jobq, prometheus.CounterValue, float64(st.GetStat().JobNum))
 	ch <- prometheus.MustNewConstMetric(e.request, prometheus.CounterValue, float64(st.GetStat().ReqNum))
@@ -128,7 +130,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(e.recovery, prometheus.CounterValue, float64(st.GetStat().RecovNum))
 }
 
-func WebMetricHandler(timeout time.Duration) http.Handler {
-	prometheus.MustRegister(NewExporter(timeout))
+func WebMetricHandler(timeout time.Duration, ver float64) http.Handler {
+	prometheus.MustRegister(NewExporter(timeout, ver))
 	return prometheus.Handler()
 }
