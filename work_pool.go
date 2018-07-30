@@ -131,15 +131,11 @@ func (p *WorkerPool) worker(ctx *contexts, idx int, cache *cc.CacheData, cp *kc.
 						cli.MarkErr()
 						return false
 					}
-				default:
-					time.Sleep(p.interval)
-				}
-
-				select {
 				case <-ctx.ctxShutdown.Done():
 					log.Warnf("ctx done, worker index[%d] stop", idx)
 					return true
 				default:
+					time.Sleep(p.interval)
 				}
 			}
 		}()
@@ -232,6 +228,7 @@ func (p *WorkerPool) recoveryWorker(ctx *contexts, idx int, cache *cc.CacheData,
 					log.Warnf("ctx done, recovery worker index[%d] stop", idx)
 					return true
 				default:
+					time.Sleep(p.interval)
 				}
 			}
 		}()
