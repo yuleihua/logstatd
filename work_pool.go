@@ -134,8 +134,8 @@ func (p *WorkerPool) worker(ctx *contexts, idx int, cache *cc.CacheData, cp *kc.
 				case <-ctx.ctxShutdown.Done():
 					log.Warnf("ctx done, worker index[%d] stop", idx)
 					return true
-				default:
-					time.Sleep(p.interval)
+					// default:
+					// 	time.Sleep(p.interval)
 				}
 			}
 		}()
