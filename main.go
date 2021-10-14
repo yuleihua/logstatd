@@ -1,156 +1,235 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
+	"bytes"
 	"flag"
 	"fmt"
-	"net/http"
-
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
-	"time"
 
-	//"github.com/json-iterator/go"
-	"airman.com/logstatd/pkg/conf"
-	"airman.com/logstatd/pkg/metric"
-	st "airman.com/logstatd/pkg/stat"
+	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
+	"github.com/valyala/fasthttp"
+	"github.com/yuleihua/logstatd/internal/conf"
+	"github.com/yuleihua/logstatd/internal/server"
+	//"github.com/yuleihua/logstatd/pkg/metric"
+	"github.com/buaazp/fasthttprouter"
+	"github.com/yuleihua/logstatd/internal/stat"
 )
 
-const (
-	defaultDeadline = 10 * time.Second
-	defaultMetric   = 60 * time.Second
-	DataStr         = "data"  //kafka message
-	ModeStr         = "mode"  // mode
-	TopicStr        = "topic" // kafka topic
-)
+var (
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-var confname string
+	configFile string
+	serverMain *server.Server
+)
 
 func init() {
-	flag.StringVar(&confname, "c", "conf/logstatd.ini", "configure file")
+	flag.StringVar(&configFile, "f", "conf/logstatd.ini", "configure file")
 }
 
-func getMachineId(addr string) int64 {
-	var tmpstr string
-	ipList := strings.Split(addr, ":")
-	if len(ipList) <= 1 || ipList[0] == "" || ipList[0] == "*" {
-		//default
-		tmpstr = os.Getenv("ENV_MID")
-	} else {
-		tmpstr = strings.Split(ipList[0], ".")[3]
+func main() {
+	flag.Parse()
+
+	// read configure file
+	conf.Setup(configFile)
+
+	// setting logger
+	log.SetFormatter(&log.TextFormatter{
+		DisableColors:   true,
+		TimestampFormat: "2006/01/02-15:04:05.000",
+	})
+
+	logfile := conf.GetService().LogFile
+	if logfile == "" {
+		logfile = "console"
 	}
-	mid, err := strconv.ParseInt(tmpstr, 10, 64)
+
+	if logfile != "" && logfile != "console" {
+		f, err := os.OpenFile(logfile, os.O_CREATE|os.O_WRONLY, 0666)
+		if err == nil {
+			log.SetOutput(f)
+		} else {
+			log.Warnf("Failed to log to file(%s), using default stderr", logfile)
+		}
+	}
+
+	level := conf.GetService().LogLevel
+	if level == 0 {
+		level = 5
+	}
+	log.SetLevel(log.Level(level))
+
+	c := make(chan os.Signal, 1)
+	signal.Ignore()
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+
+	// handle
+	server, err := server.NewServer(conf.GetService(), conf.GetKafka())
 	if err != nil {
-		//default
-		log.Fatalf("invalid ip string:%v", tmpstr)
+		log.Fatalf("Start server error:%v", err)
 	}
-	return mid
+	serverMain = server
+
+	router := fasthttprouter.New()
+
+	router.POST("/kafka", Kafka)
+	router.POST("/channel", LogChannel)
+	//router.Handle("/metric", metric.WebMetricHandler(defaultMetric, float64(0.5)))
+	router.GET("/status", Status)
+	router.GET("/uuid", UUID)
+
+	errChan := make(chan error, 16)
+	go func() {
+		if err := fasthttp.ListenAndServe(conf.GetService().Address, router.Handler); err != nil {
+			log.Println(err)
+			errChan <- err
+		}
+	}()
+
+	log.Error("shutting down worker server")
+	if err := serverMain.Shutdown(); err != nil {
+		log.Errorf("shutdown error:%v", err)
+	}
+	log.Error("shutting down end")
+
+	select {
+	case <-c:
+		log.Warnf("receive quit signal")
+		break
+	case e := <-server.ErrChan:
+		log.Errorf("stack error, %v", e)
+		break
+	case e := <-errChan:
+		log.Errorf("stack error, %v", e)
+		break
+
+	}
+
+	//ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	//defer cancel()
+	//
+	//if config.CommonConfig().MetricAddress != "" && metricServer != nil {
+	//	metricServer.Shutdown(ctx)
+	//}
+
+	// shutdown http server
+	log.Error("shutting down worker begin")
+	if err := serverMain.Shutdown(); err != nil {
+		log.Errorf("shutdown worker error:%v", err)
+	}
+	log.Error("shutting down end")
 }
 
 type LogMessage struct {
-	Channel   string
-	Appid     string
-	AppVerson string `json:"app_version"`
-	ClientIp  string `json:"client_ip"`
-	Source    string
-	Type      string
-	SysInfo   string `json:"sys_channel"`
-	UserInfo  string `json:"user_info"`
-	PageInfo  string `json:"page_info"`
-	EventInfo string `json:"event_info"`
-	ExtInfo   string `json:"ext_info"`
+	Source  string   `json:"source"`
+	Channel string   `json:"channel"`
+	Items   []string `json:"items"`
 }
 
-type ResCount struct {
-	Count int `json:"count"`
-}
-
-func logMsgData(w http.ResponseWriter, r *http.Request) {
-	var ms []LogMessage
-	if err := ParseJson(r, &ms); err != nil {
-		panic(err)
-	}
-
-	_, month, day := time.Now().Date()
-	count := 0
-	for _, m := range ms {
-		topic := fmt.Sprintf("%s_%d%d", m.Type, month, day)
-		dataval, err := json.Marshal(m)
-		if err != nil {
-			log.Errorf("json marshal error:%v,data(%v)", err, m)
-			continue
-		}
-		GetServer().TransportMsg(topic, string(dataval), 0, true)
-		count = count + 1
-	}
-	data := &ResCount{
-		Count: count,
-	}
-	WriteResponse(w, http.StatusOK, data)
-}
-
-func WriteResponse(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Errorf("json encode body error, %v:%v", data, err)
+func LogChannel(ctx *fasthttp.RequestCtx) {
+	if !bytes.Equal(ctx.Method(), []byte(fasthttp.MethodPost)) {
+		ctx.SetStatusCode(fasthttp.StatusForbidden)
 		return
 	}
-}
 
-func ParseJson(req *http.Request, obj interface{}) error {
-	decoder := json.NewDecoder(req.Body)
-	if err := decoder.Decode(obj); err != nil {
-		log.Errorf("json decode body error, %v:%v", req.Body, err)
-		return err
+	if len(ctx.PostBody()) <= 2 {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
 	}
-	return nil
-}
 
-type LogKafka struct {
-	Topic string
-	Data  string
-	Type  string
-}
-
-func kafkaHandler(w http.ResponseWriter, r *http.Request) {
-	st.GetStat().Inc(st.ST_REQ)
-
-	var ms []LogKafka
-	if err := ParseJson(r, &ms); err != nil {
-		panic(err)
+	var ms LogMessage
+	if err := json.Unmarshal(ctx.PostBody(), &ms); err != nil {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
 	}
 
 	count := 0
-	for _, m := range ms {
-		GetServer().TransportMsg(m.Topic, m.Data, 0, true)
+	for _, msg := range ms.Items {
+		serverMain.TransportMsg("", msg, true)
 		count = count + 1
 	}
-	data := &ResCount{
-		Count: count,
+
+	data := fmt.Sprintf("{\"%s\":%d}", "result", count)
+	if _, err := ctx.Write([]byte(data)); err != nil {
+		log.Errorf("write error, %v", err)
+		return
 	}
-	WriteResponse(w, http.StatusOK, data)
+
+	ctx.Response.Header.Set("Content-Type", "application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
 }
 
-func statHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, st.GetStat().NowStat())
+type KafkaMsg struct {
+	Topic string   `json:"topic,omitempty"`
+	Items []string `json:"items"`
+	Type  string   `json:"type,omitempty"`
 }
 
-func statusHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, st.GetStat().GetStatus())
+func Kafka(ctx *fasthttp.RequestCtx) {
+	if !bytes.Equal(ctx.Method(), []byte(fasthttp.MethodPost)) {
+		ctx.SetStatusCode(fasthttp.StatusForbidden)
+		return
+	}
+
+	if len(ctx.PostBody()) <= 2 {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	var ms KafkaMsg
+	if err := json.Unmarshal(ctx.PostBody(), &ms); err != nil {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	count := 0
+	for _, msg := range ms.Items {
+		serverMain.TransportMsg(ms.Topic, msg, true)
+		count = count + 1
+	}
+
+	data := fmt.Sprintf("{\"%s\":%d}", "result", count)
+
+	if _, err := ctx.Write([]byte(data)); err != nil {
+		log.Errorf("write error, %v", err)
+		return
+	}
+
+	ctx.Response.Header.Set("Content-Type", "application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+}
+
+func Status(ctx *fasthttp.RequestCtx) {
+	s := stat.GetStat()
+
+	content, err := json.Marshal(s)
+	if err != nil {
+		log.Errorf("json marshal error, %v, %v", s, err)
+		return
+	}
+
+	if _, err = ctx.Write(content); err != nil {
+		log.Errorf("write error, %v", err)
+		return
+	}
+
+	ctx.Response.Header.Set("Content-Type", "application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	return
 }
 
 type IdCode struct {
-	Id int64 `json:"id"`
+	Id int64 `json:"uuid"`
 }
 
-func uuidHandler(w http.ResponseWriter, r *http.Request) {
-	uuid, err := GetServer().GetUid()
+func UUID(ctx *fasthttp.RequestCtx) {
+	if serverMain == nil {
+		return
+	}
+
+	uuid, err := serverMain.GetUUid()
 	if err != nil {
 		log.Errorf("uuid error, %v", err)
 		return
@@ -159,75 +238,19 @@ func uuidHandler(w http.ResponseWriter, r *http.Request) {
 	data := &IdCode{
 		Id: uuid,
 	}
-	WriteResponse(w, http.StatusOK, data)
-}
 
-func main() {
-	flag.Parse()
-
-	c := make(chan os.Signal)
-	signal.Ignore()
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-
-	// read configure file
-	conf.Setup(confname)
-
-	// setting logger
-	log.SetFormatter(&log.TextFormatter{
-		DisableColors:   true,
-		TimestampFormat: "2006/01/02-15:04:05.000",
-	})
-
-	logfile := conf.GetLogger().LogFile
-	if logfile != "" {
-		if logfile != "console" {
-			f, err := os.OpenFile(conf.GetLogger().LogFile, os.O_CREATE|os.O_WRONLY, 0666)
-			if err == nil {
-				log.SetOutput(f)
-			} else {
-				log.Warnf("Failed to log to file(%s), using default stderr", conf.GetLogger().LogFile)
-			}
-		}
-		log.SetLevel(log.Level(conf.GetLogger().LogLevel))
+	content, err := json.Marshal(data)
+	if err != nil {
+		log.Errorf("json marshal error, %v, %v", data, err)
+		return
 	}
 
-	// handle
-	if err := NewServer(conf.GetService(), conf.GetProxy()); err != nil {
-		log.Fatalf("Start server error:%v", err)
+	if _, err = ctx.Write(content); err != nil {
+		log.Errorf("write error, %v", err)
+		return
 	}
 
-	router := http.NewServeMux()
-	router.HandleFunc("/addkafka", kafkaHandler)
-	router.HandleFunc("/logkafka", logMsgData)
-	router.Handle("/metric", metric.WebMetricHandler(defaultMetric, float64(0.5)))
-	router.HandleFunc("/stats", statHandler)
-	router.HandleFunc("/status", statusHandler)
-	router.HandleFunc("/idgen", uuidHandler)
-
-	srv := &http.Server{
-		Addr:         conf.GetService().SrvAddr,
-		WriteTimeout: time.Second * 15,
-		ReadTimeout:  time.Second * 15,
-		IdleTimeout:  time.Second * 60,
-		Handler:      router,
-	}
-
-	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			log.Println(err)
-		}
-	}()
-
-	<-c
-
-	// shutdown http server
-	log.Error("shutting down http server with graceful")
-	ctx, _ := context.WithTimeout(context.Background(), defaultDeadline)
-	srv.Shutdown(ctx)
-
-	log.Error("shutting down worker server")
-	if err := GetServer().Shutdown(); err != nil {
-		log.Errorf("shutdown error:%v", err)
-	}
-	log.Error("shutting down end")
+	ctx.Response.Header.Set("Content-Type", "application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	return
 }

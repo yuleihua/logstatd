@@ -1,0 +1,17 @@
+{
+    "service":{
+        "log_level":4,
+        "address":"127.0.0.1:9527",
+        "pool_min":2,
+        "pool_max":4,
+        "worker_num":3,
+        "interval":200,
+        "queue_num":16,
+        "leveldb_name":"/tmp/db"
+    },
+    "kafka":{
+        "address":"127.0.0.1:9092",
+        "topics": ["test","demo"],
+        "timeout":15
+    }
+}
