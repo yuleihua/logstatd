@@ -20,6 +20,8 @@ import (
 // var r = rand.New(rand.NewSource(time.Now().UnixNano()))
 // const INT_MAX int64 = int64(^uint64(0) >> 1)
 
+var mapTopics = make(map[string]struct{})
+
 func GetMachineId(address string) int64 {
 	var temp string
 	ipList := strings.Split(address, ":")
@@ -37,7 +39,7 @@ func GetMachineId(address string) int64 {
 }
 
 type Server struct {
-	topic   string
+	topics  []string
 	wp      *WorkerPool
 	cache   *cache.CacheData
 	cp      *kafka.ClientPool
@@ -47,7 +49,7 @@ type Server struct {
 }
 
 func NewServer(sc *conf.Service, sp *conf.Kafka) (*Server, error) {
-	if sc == nil || sp == nil {
+	if sc == nil || sp == nil || len(sp.Topics) == 0{
 		return nil, errors.New("invalid parameter")
 	}
 
@@ -90,7 +92,10 @@ func NewServer(sc *conf.Service, sp *conf.Kafka) (*Server, error) {
 		}
 	}
 
-	s.topic = sp.Address
+	for _, topic := range  sp.Topics {
+		mapTopics[topic] = struct{}{}
+	}
+	s.topics = sp.Topics
 
 	log.Info("server initiation end")
 	return s, nil
@@ -118,13 +123,23 @@ func (s *Server) Shutdown() error {
 }
 
 func (s *Server) TransportMsg(topic, msg string, isWeb bool) {
+	inTopic := topic
+	if topic == "" {
+		inTopic = s.topics[0]
+	} else {
+		if _, isOK := mapTopics[topic]; !isOK {
+			log.Errorf("invalid topic %s", topic)
+			return
+		}
+	}
+
 	if s.wp != nil && isWeb {
 		uuid, err := s.GetUUid()
 		if err != nil {
 			log.Errorf("GetUid error:%v,data(%v)", err, uuid)
 			return
 		}
-		obj := JobWork{topic, msg, false, uint64(uuid)}
+		obj := JobWork{Topic: inTopic, Msg: msg, IsCache: false, Jid: uint64(uuid)}
 
 		content, err := json.Marshal(obj)
 		if err != nil {
