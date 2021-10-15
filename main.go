@@ -8,14 +8,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/yuleihua/logstatd/internal/conf"
 	"github.com/yuleihua/logstatd/internal/server"
-	//"github.com/yuleihua/logstatd/pkg/metric"
-	"github.com/buaazp/fasthttprouter"
 	"github.com/yuleihua/logstatd/internal/stat"
+	fasthttpprom "github.com/carousell/fasthttp-prometheus-middleware"
 )
 
 var (
@@ -72,27 +72,22 @@ func main() {
 	}
 	serverMain = server
 
-	router := fasthttprouter.New()
+	router := router.New()
+	p := fasthttpprom.NewPrometheus("logstatd")
+	p.Use(router)
 
 	router.POST("/kafka", Kafka)
 	router.POST("/channel", LogChannel)
-	//router.Handle("/metric", metric.WebMetricHandler(defaultMetric, float64(0.5)))
 	router.GET("/status", Status)
 	router.GET("/uuid", UUID)
 
 	errChan := make(chan error, 16)
 	go func() {
-		if err := fasthttp.ListenAndServe(conf.GetService().Address, router.Handler); err != nil {
+		if err := fasthttp.ListenAndServe(conf.GetService().Address, p.Handler); err != nil {
 			log.Println(err)
 			errChan <- err
 		}
 	}()
-
-	log.Error("shutting down worker server")
-	if err := serverMain.Shutdown(); err != nil {
-		log.Errorf("shutdown error:%v", err)
-	}
-	log.Error("shutting down end")
 
 	select {
 	case <-c:
@@ -106,6 +101,12 @@ func main() {
 		break
 
 	}
+
+	log.Error("shutting down worker server")
+	if err := serverMain.Shutdown(); err != nil {
+		log.Errorf("shutdown error:%v", err)
+	}
+	log.Error("shutting down end")
 
 	//ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	//defer cancel()
