@@ -243,12 +243,12 @@ func mainHandle(w *JobWork, cache *cache.CacheData, cli *kafka.WrapClient) error
 	if err := cli.SendMsgByByte(w.Topic, w.Msg); err != nil {
 		stat.GetStat().Inc(stat.ST_FAILED)
 		if w.IsCache {
-			dataval, err := json.Marshal(w)
+			data, err := json.Marshal(w)
 			if err != nil {
 				log.Errorf("mainHandle json error:%v,data(%v)", err, w)
 			}
 
-			if e := cache.Put([]byte(fmt.Sprintf("%s:%s:%v", PrefixRecovery, w.Topic, w.Jid)), dataval); e != nil {
+			if e := cache.Put([]byte(fmt.Sprintf("%s:%s:%v", PrefixRecovery, w.Topic, w.Jid)), data); e != nil {
 				log.Errorf("Put recovery data, key:(%v:%v:%v) error:%v", PrefixRecovery, w.Topic, w.Jid, e)
 				return e
 			}
