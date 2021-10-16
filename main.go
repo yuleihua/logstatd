@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"github.com/yuleihua/logstatd/internal/middleware"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,7 +16,6 @@ import (
 	"github.com/yuleihua/logstatd/internal/conf"
 	"github.com/yuleihua/logstatd/internal/server"
 	"github.com/yuleihua/logstatd/internal/stat"
-	fasthttpprom "github.com/carousell/fasthttp-prometheus-middleware"
 )
 
 var (
@@ -73,17 +73,16 @@ func main() {
 	serverMain = server
 
 	router := router.New()
-	p := fasthttpprom.NewPrometheus("logstatd")
-	p.Use(router)
+	mds := middleware.DefaultMiddlewares
 
-	router.POST("/kafka", Kafka)
-	router.POST("/channel", LogChannel)
-	router.GET("/status", Status)
-	router.GET("/uuid", UUID)
+	router.POST("/kafka", mds.Apply(Kafka))
+	router.POST("/channel", mds.Apply(LogChannel))
+	router.GET("/status", mds.Apply(Status))
+	router.GET("/uuid", mds.Apply(UUID))
 
 	errChan := make(chan error, 16)
 	go func() {
-		if err := fasthttp.ListenAndServe(conf.GetService().Address, p.Handler); err != nil {
+		if err := fasthttp.ListenAndServe(conf.GetService().Address, router.Handler); err != nil {
 			log.Println(err)
 			errChan <- err
 		}
