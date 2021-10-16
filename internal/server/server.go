@@ -139,7 +139,7 @@ func (s *Server) TransportMsg(topic, msg string, isWeb bool) {
 			log.Errorf("GetUid error:%v,data(%v)", err, uuid)
 			return
 		}
-		obj := JobWork{Topic: inTopic, Msg: msg, IsCache: false, Jid: uint64(uuid)}
+		obj := JobWork{Topic: inTopic, Msg: msg, IsCache: true, Jid: uint64(uuid)}
 
 		content, err := json.Marshal(obj)
 		if err != nil {
