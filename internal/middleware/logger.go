@@ -10,11 +10,11 @@ import (
 type Logger struct {
 }
 
-func NewLogger() *Logger{
+func NewLogger() *Logger {
 	return &Logger{}
 }
 
-func (l *Logger) Handle() func (next fasthttp.RequestHandler) fasthttp.RequestHandler{
+func (l *Logger) Handle() func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
 			startTime := time.Now()
@@ -22,10 +22,10 @@ func (l *Logger) Handle() func (next fasthttp.RequestHandler) fasthttp.RequestHa
 
 			if ctx.Response.StatusCode() < 400 {
 				log.Infof("user access code %d time %v, method %s path %s client-real-ip %s",
-				ctx.Response.StatusCode(), time.Since(startTime), string(ctx.Method()), ctx.Path(),ctx.Request.Header.Peek("X-Real-IP"))
+					ctx.Response.StatusCode(), time.Since(startTime), string(ctx.Method()), ctx.Path(), ctx.Request.Header.Peek("X-Real-IP"))
 			} else {
 				log.Warnf("user access code %d time %v, method %s path %s client-real-ip %s",
-					ctx.Response.StatusCode(), time.Since(startTime), string(ctx.Method()), ctx.Path(),ctx.Request.Header.Peek("X-Real-IP"))
+					ctx.Response.StatusCode(), time.Since(startTime), string(ctx.Method()), ctx.Path(), ctx.Request.Header.Peek("X-Real-IP"))
 			}
 		}
 	}

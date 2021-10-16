@@ -4,10 +4,9 @@ go 1.16
 
 require (
 	github.com/Shopify/sarama v1.30.0
-	github.com/carousell/fasthttp-prometheus-middleware v1.0.3
 	github.com/fasthttp/router v0.5.2
 	github.com/json-iterator/go v1.1.12
-	github.com/prometheus/client_golang v1.11.0 // indirect
+	github.com/prometheus/client_golang v1.11.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/syndtr/goleveldb v1.0.0

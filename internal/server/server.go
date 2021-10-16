@@ -49,7 +49,7 @@ type Server struct {
 }
 
 func NewServer(sc *conf.Service, sp *conf.Kafka) (*Server, error) {
-	if sc == nil || sp == nil || len(sp.Topics) == 0{
+	if sc == nil || sp == nil || len(sp.Topics) == 0 {
 		return nil, errors.New("invalid parameter")
 	}
 
@@ -92,7 +92,7 @@ func NewServer(sc *conf.Service, sp *conf.Kafka) (*Server, error) {
 		}
 	}
 
-	for _, topic := range  sp.Topics {
+	for _, topic := range sp.Topics {
 		mapTopics[topic] = struct{}{}
 	}
 	s.topics = sp.Topics
@@ -104,17 +104,17 @@ func NewServer(sc *conf.Service, sp *conf.Kafka) (*Server, error) {
 func (s *Server) Shutdown() error {
 	log.Warn("server shutdown begin")
 
-	log.Warn("server shutdown step1: shutdown worker pool")
+	log.Info("server shutdown step1: shutdown worker pool")
 	if s.wp != nil {
 		s.wp.Stop()
 	}
 
-	log.Warn("server shutdown step2: shutdown leveldb cache")
+	log.Info("server shutdown step2: shutdown leveldb cache")
 	if s.cp != nil {
 		s.cp.Close()
 	}
 
-	log.Warn("server shutdown step3: shutdown kafka client pool")
+	log.Info("server shutdown step3: shutdown kafka client pool")
 	if s.cache != nil {
 		s.cache.Close()
 	}
@@ -171,6 +171,7 @@ func (s *Server) TransportMsg(topic, msg string, isWeb bool) {
 
 				if err := s.cache.Put([]byte(fmt.Sprintf("%s:%s:%v", PrefixQueue, obj.Topic, obj.Jid)), content); err != nil {
 					log.Errorf("cache put error:%v,data(%v)", err, obj)
+					s.ErrChan <- errors.New("cache put item error")
 					return
 				}
 			} else {
@@ -195,6 +196,7 @@ func (s *Server) TransportMsg(topic, msg string, isWeb bool) {
 				stat.GetStat().Inc(stat.ST_DELERR)
 			}
 			log.Warnf("jobq is full, add recovery key:(%s:%s:%v)", PrefixRecovery, obj.Topic, obj.Jid)
+			s.ErrChan <- errors.New("job queue is full")
 		}
 	}
 }

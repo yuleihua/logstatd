@@ -47,7 +47,7 @@ func (p *Prometheus) registerMetrics(subsystem string) {
 		[]string{"code", "method"},
 	)
 
-	prometheus.MustRegister(p.reqCnt,p.duration)
+	prometheus.MustRegister(p.reqCnt, p.duration)
 }
 
 func (p *Prometheus) Handle() func(next fasthttp.RequestHandler) fasthttp.RequestHandler {

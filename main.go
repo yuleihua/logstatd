@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/yuleihua/logstatd/internal/middleware"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/yuleihua/logstatd/internal/conf"
+	"github.com/yuleihua/logstatd/internal/middleware"
 	"github.com/yuleihua/logstatd/internal/server"
 	"github.com/yuleihua/logstatd/internal/stat"
 )
@@ -26,7 +26,7 @@ var (
 )
 
 func init() {
-	flag.StringVar(&configFile, "f", "conf/logstatd.ini", "configure file")
+	flag.StringVar(&configFile, "f", "conf/logstatd.json", "configure file")
 }
 
 func main() {
@@ -123,7 +123,7 @@ func main() {
 }
 
 type LogMessage struct {
-	Source  string   `json:"source"`
+	Source  string   `json:"source,omitempty"`
 	Channel string   `json:"channel"`
 	Items   []string `json:"items"`
 }
@@ -141,6 +141,7 @@ func LogChannel(ctx *fasthttp.RequestCtx) {
 
 	var ms LogMessage
 	if err := json.Unmarshal(ctx.PostBody(), &ms); err != nil {
+		log.Errorf("json error, %s, %v", string(ctx.PostBody()), err)
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		return
 	}
@@ -180,6 +181,7 @@ func Kafka(ctx *fasthttp.RequestCtx) {
 
 	var ms KafkaMsg
 	if err := json.Unmarshal(ctx.PostBody(), &ms); err != nil {
+		log.Errorf("json error, %s, %v", string(ctx.PostBody()), err)
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		return
 	}

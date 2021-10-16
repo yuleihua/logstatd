@@ -82,7 +82,7 @@ func NewCorsHandler(options Options) *CorsHandler {
 	return cors
 }
 
-func (c *CorsHandler) Handle() func (next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (c *CorsHandler) Handle() func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
 			if string(ctx.Method()) == "OPTIONS" {
