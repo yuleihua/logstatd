@@ -75,6 +75,18 @@ func main() {
 	router := router.New()
 	mds := middleware.DefaultMiddlewares
 
+	if conf.GetService().IsCors && len(conf.GetService().Origins) > 0 {
+		mds = mds.Append(middleware.NewCorsHandler(*middleware.NewOption(conf.GetService().Origins)))
+	}
+
+	if conf.GetService().IsAuth && len(conf.GetService().Auths) > 0 {
+		mds = mds.Append(middleware.NewAuthorization(conf.GetService().Auths[0].AppId, conf.GetService().Auths[0].AppSecret, conf.GetService().Auths[0].AppTimeout))
+	}
+
+	if conf.GetService().IsPrometheus {
+		mds = mds.Append(middleware.NewPrometheus("logstatd", "/metrics"))
+	}
+
 	router.POST("/kafka", mds.Apply(Kafka))
 	router.POST("/channel", mds.Apply(LogChannel))
 	router.GET("/status", mds.Apply(Status))
@@ -98,7 +110,6 @@ func main() {
 	case e := <-errChan:
 		log.Errorf("stack error, %v", e)
 		break
-
 	}
 
 	log.Error("shutting down worker server")

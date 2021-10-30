@@ -61,9 +61,18 @@ type Authorization struct {
 	duration int64
 }
 
+func NewAuthorization(appid, secret string, duration int64) *Authorization {
+	return &Authorization{
+		appid:    appid,
+		secret:   secret,
+		duration: duration,
+	}
+}
+
 func (a *Authorization) Verify(ctx *fasthttp.RequestCtx) bool {
 	appid := string(ctx.Request.Header.Peek(SignAppid))
 	if appid != a.appid {
+		log.Errorf("authorization appid error, %s, %s", appid, a.appid)
 		return false
 	}
 
@@ -71,7 +80,8 @@ func (a *Authorization) Verify(ctx *fasthttp.RequestCtx) bool {
 	timestamp := string(ctx.Request.Header.Peek(SignTimestamp))
 
 	var body string
-	if string(ctx.Method()) != fasthttp.MethodGet {
+	method := string(ctx.Method())
+	if method == fasthttp.MethodPost || method == fasthttp.MethodPatch || method == fasthttp.MethodPut {
 		body = string(ctx.PostBody())
 	}
 	uri := string(ctx.URI().Path())

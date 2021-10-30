@@ -14,16 +14,26 @@ type Conf struct {
 	Kafka   *Kafka   `json:"kafka"`
 }
 
+type AuthConfig struct {
+	AppId      string `json:"app_id"`
+	AppSecret  string `json:"app_secret"`
+	AppTimeout int64  `json:"app_timeout"`
+}
 type Service struct {
-	Address   string `json:"address"`
-	LogFile   string `json:"log_file,omitempty"`
-	LogLevel  int    `json:"log_level,omitempty"`
-	PoolMin   int    `json:"pool_min"`
-	PoolMax   int    `json:"pool_max"`
-	WorkerNum int    `json:"worker_num"`
-	Interval  int    `json:"interval"`
-	JobNum    int    `json:"queue_num"`
-	DBName    string `json:"leveldb_name"`
+	Address      string       `json:"address"`
+	LogFile      string       `json:"log_file,omitempty"`
+	DBName       string       `json:"leveldb_name"`
+	LogLevel     int          `json:"log_level,omitempty"`
+	PoolMin      int          `json:"pool_min"`
+	PoolMax      int          `json:"pool_max"`
+	WorkerNum    int          `json:"worker_num"`
+	Interval     int          `json:"interval"`
+	JobNum       int          `json:"queue_num"`
+	IsPrometheus bool         `json:"is_prometheus,omitempty"`
+	IsAuth       bool         `json:"is_auth,omitempty"`
+	IsCors       bool         `json:"is_cors,omitempty"`
+	Origins      []string     `json:"origins,omitempty"`
+	Auths        []AuthConfig `json:"auths,omitempty"`
 }
 
 type Kafka struct {

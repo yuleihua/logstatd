@@ -7,7 +7,12 @@
         "worker_num":3,
         "interval":200,
         "queue_num":16,
-        "leveldb_name":"/tmp/db"
+        "leveldb_name":"/tmp/db",
+        "is_cors": true,
+        "is_prometheus": true,
+        "is_auth": false,
+        "origins": ["localhost","*"],
+        "auths": [{"app_id":"test","app_secret":"secret","app_timeout":60}]
     },
     "kafka":{
         "address":"127.0.0.1:9092",

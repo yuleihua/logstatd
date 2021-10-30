@@ -17,7 +17,7 @@ type KafkaClient struct {
 
 func NewKafkaClient(address string, timeout time.Duration, isSuccess bool) (*KafkaClient, error) {
 	config := sarama.NewConfig()
-	// config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.RequiredAcks = sarama.WaitForAll
 	// NewRandomPartitioner ;NewRoundRobinPartitioner ;NewRandomPartitioner ;NewHashPartitioner
 	config.Net.DialTimeout = timeout
 	config.Producer.Partitioner = sarama.NewRoundRobinPartitioner

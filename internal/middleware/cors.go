@@ -4,6 +4,7 @@ package middleware
 // this file coming from : https://github.com/AdhityaRamadhanus/fasthttpcors/blob/master/cors.go
 
 import (
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -35,8 +36,34 @@ type CorsHandler struct {
 
 var defaultOptions = &Options{
 	AllowedOrigins: []string{"*"},
-	AllowedMethods: []string{"GET", "POST", "HEAD"},
-	AllowedHeaders: []string{"Origin", "Accept", "Content-Type"},
+	AllowedHeaders: []string{"*"},
+	AllowedMethods: []string{
+		http.MethodOptions,
+		http.MethodHead,
+		http.MethodGet,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodPatch,
+		http.MethodDelete,
+	},
+}
+
+func NewOption(origins []string) *Options {
+	return &Options{
+		AllowedOrigins: origins,
+		AllowedHeaders: []string{"*"},
+		AllowedMethods: []string{
+			http.MethodOptions,
+			http.MethodHead,
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+		},
+		AllowCredentials: false,
+		Debug:            false,
+	}
 }
 
 func DefaultCorsHandler() *CorsHandler {
